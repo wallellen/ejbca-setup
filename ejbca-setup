@@ -256,6 +256,7 @@ ejbca_installer() {
     sha256sum --check mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.sha256 2>&1| grep mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar
     if [ $? -ne 0 ]; then
        echo "SHA256 for mariadb-java-client does not match"
+       rm -rf "mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar" "mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.sha256"
        exit 1
     fi
     cd ..
@@ -268,6 +269,7 @@ ejbca_installer() {
     sha256sum --check ejbca_ce_6_5.0.5.zip.SHA256
     if [ $? -ne 0 ]; then
        echo "SHA256 for EJBCA does not match"
+       rm -rf "ejbca_ce_${EJBCA_VERSION}.zip" "ejbca_ce_${EJBCA_VERSION}.zip.SHA256"
        exit 1
     fi
     cd ..
@@ -407,7 +409,7 @@ keys.alg=RSA
 # Examples: 1024 for RSA or DSA and prime256v1 for ECDSA
 #
 # Default: 2048
-keys.spec=4096
+keys.spec=2048
 EOF
 
 cat <<EOF > ejbca-custom/conf/certstore.properties
@@ -420,7 +422,7 @@ certstore.enabled=true
 
 # Context root (the path in the URL)
 # Default is '/certificates'
-certstore.contextroot=/ejbca/publicweb/certificates
+#certstore.contextroot=/ejbca/publicweb/certificates
 EOF
 
 cat <<EOF > ejbca-custom/conf/cesecore.properties
@@ -688,7 +690,7 @@ crlstore.enabled=true
 
 # Context root (the path in the URL)
 # Default is '/crls'
-crlstore.contextroot=/ejbca/publicweb/crls
+#crlstore.contextroot=/ejbca/publicweb/crls
 EOF
 
 
