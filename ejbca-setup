@@ -1338,7 +1338,7 @@ if [ -f /etc/redhat-release ]; then
   PKG_INSTALL="yum install tar unzip java-1.8.0-openjdk-devel ant psmisc mariadb bc patch"
 else if [ -f /etc/debian_version ]; then
   echo "found Debian/Ubuntu"
-  PKG_INSTALL="apt install unzip openjdk-8-jdk-headless ant ant-optional psmisc mariadb-client bc patch"
+  PKG_INSTALL="apt install unzip openjdk-8-jdk-headless ant ant-optional psmisc mariadb-client bc patch curl"
   else
     echo "Unknown platform, your milage may vary"
   fi
