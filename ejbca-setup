@@ -59,9 +59,10 @@ EJBCA_DOWNLOAD_URL="https://downloads.sourceforge.net/project/ejbca/ejbca6/ejbca
 EJBCA_DOWNLOAD_SHA256_URL="https://downloads.sourceforge.net/project/ejbca/ejbca6/ejbca_6_5_0/ejbca_ce_${EJBCA_VERSION}.zip.SHA-256"
 MARIADB_DOWNLOAD_URL="https://downloads.mariadb.com/Connectors/java/connector-java-${MARIADB_CONNECTOR_VERSION}/mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar"
 MARIADB_DOWNLOAD_SHA256_URL="https://downloads.mariadb.com/Connectors/java/connector-java-${MARIADB_CONNECTOR_VERSION}/sha256sums.txt"
-
-scep_ra_keyStorePassword_1="geheim"
-scep_ra_datasource_password="ejbca"
+WILDFLY_TAR="wildfly-${WILDFLY_VERSION}.tar.gz"
+WILDFLY_TAR_SHA256="80781609be387045273f974662dadf7f64ad43ee93395871429bc6b7786ec8bc"
+WILDFLY_DIR="wildfly-${WILDFLY_VERSION}"
+WILDFLY_DOWNLOAD_URL="https://download.jboss.org/wildfly/${WILDFLY_VERSION}/${WILDFLY_TAR}"
 
 ########################################################################################
 
@@ -78,9 +79,7 @@ pwgen() {
 keystorepass=$(pwgen)
 truststorepass=$(pwgen)
 httpsserver_password=$(pwgen)
-
-WILDFLY_TAR="wildfly-${WILDFLY_VERSION}.tar.gz"
-WILDFLY_DIR="wildfly-${WILDFLY_VERSION}"
+cmskeystorepass=$(pwgen)
 
 
 init_mysql() {
@@ -244,11 +243,20 @@ ejbca_installer() {
   if [ ! -d Download ]; then
     mkdir Download
   fi
-  
-  if [ ! -f Download/${WILDFLY_TAR} ]; then
-    curl -o Download/${WILDFLY_TAR} -L http://download.jboss.org/wildfly/${WILDFLY_VERSION}/${WILDFLY_TAR}
+
+  cd Download
+  if [ ! -f ${WILDFLY_TAR} ]; then
+    curl -o ${WILDFLY_TAR} -L ${WILDFLY_DOWNLOAD_URL}
+    echo ${WILDFLY_TAR_SHA256} ${WILDFLY_TAR} > ${WILDFLY_TAR}.sha256
+    sha256sum --check ${WILDFLY_TAR}.sha256
+    if [ $? -ne 0 ]; then
+       echo "SHA256 for wildfly does not match"
+       rm -f "${WILDFLY_TAR}"
+       exit 1
+    fi
   fi
-  
+  cd..
+
   if [ ! -f Download/mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar ]; then
     cd Download
     curl -o mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar -L ${MARIADB_DOWNLOAD_URL}
@@ -796,7 +804,7 @@ ejbca.productionmode=true
 
 # Password used to protect CMS keystores in the database (CAs CMS signer/enc certificate).
 # The default value is the same for convenience.
-#ca.cmskeystorepass=foo123
+ca.cmskeystorepass=${cmskeystorepass}
 
 # ------------- Approval configuration ------------------------
 # Settings working as default values in the approval functionality
@@ -1042,648 +1050,6 @@ ca.policy=null
 # profile for ROOTCA is used.
 # Default: ROOTCA
 #ca.certificateprofile=MyOwnRootCACertificateProfile
-EOF
-
-
-cat <<EOF > ejbca-custom/conf/log.properties
-<?xml version="1.0" encoding="UTF-8" ?>
-<!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
-<log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/">
-
-	<appender name="EJBCAFILE" class="org.apache.log4j.RollingFileAppender">
-		<param name="File" value="\${jboss.server.log.dir}/ejbca.log" />
-        <param name="Append" value="true" />
-        <param name="MaxFileSize" value="10240KB" />
-        <!--
-        <param name="MaxBackupIndex" value="0" />
-        -->
-        <layout class="org.apache.log4j.PatternLayout">
-            <param name="ConversionPattern" value="%d %-5p [%c] (%t) %m%n"/>
-        </layout>           
-     </appender>
-
-	<appender name="OcspTransactionLogger" class="org.apache.log4j.RollingFileAppender">
-		<param name="File" value="\${jboss.server.log.dir}/transaction.log" />
-		<param name="Threshold" value="DEBUG"/>
-        <param name="Append" value="true" />
-        <param name="MaxFileSize" value="10240KB" />
-        <layout class="org.apache.log4j.PatternLayout">
-            <param name="ConversionPattern" value="%m%n"/>
-        </layout>           
-     </appender>
-
-	<appender name="OcspAuditLogger" class="org.apache.log4j.RollingFileAppender">
-		<param name="File" value="\${jboss.server.log.dir}/audit.log" />
-		<param name="Threshold" value="DEBUG"/>
-        <param name="Append" value="true" />
-        <param name="MaxFileSize" value="10240KB" />
-        <layout class="org.apache.log4j.PatternLayout">
-            <param name="ConversionPattern" value="%m%n"/>
-        </layout>           
-     </appender>
-     
-    <!-- Sample loggers using SaferDailyRollingFileAppender. Replace the above with these if using. 
-	<appender name="OcspTransactionLogger" class="org.cesecore.util.log.SaferDailyRollingFileAppender">
-     	<errorHandler class="org.cesecore.util.log.ProbableErrorHandler" />
-		<param name="File" value="\${jboss.server.log.dir}/transaction.log" />
-		<param name="Append" value="true" />
-		<param name="Threshold" value="DEBUG"/>	
-		<param name="DatePattern" value="'.'yyyy-MM-dd_HH" />
-		<layout class="org.apache.log4j.PatternLayout">
-			<param name="ConversionPattern" value="%m%n" />
-		</layout>
-	</appender>
-
-	<appender name="OcspAuditLogger" class="org.cesecore.util.log.SaferDailyRollingFileAppender">
-		<errorHandler class="org.cesecore.util.log.ProbableErrorHandler" />
-        <param name="File" value="\${jboss.server.log.dir}/audit.log" />
-        <param name="Append" value="true" />
-        <param name="Threshold" value="DEBUG"/>
-        <param name="DatePattern" value="'.'yyyy-MM-dd" />
-        <layout class="org.apache.log4j.PatternLayout">
-        	<param name="ConversionPattern" value="%m%n" />
-        </layout>
-    </appender>
-    --> 
-
-	<category name="org.cesecore.certificates.ocsp.logging.TransactionLogger" additivity="false">
-		<priority value="DEBUG"/>
-		<appender-ref ref="OcspTransactionLogger"/>
-	</category>
-	
-	<category name="org.cesecore.certificates.ocsp.logging.AuditLogger" additivity="false">
-		<priority value="DEBUG"/>
-		<appender-ref ref="OcspAuditLogger"/>
-	</category>
-	
-	
-	<!-- DEBUG is enabled by default from the root category in the end -->
-	<!--
-	<category name="org.ejbca">
-        <priority value="TRACE"/>
-    </category>
-
-    <category name="org.cesecore">
-        <priority value="TRACE"/>
-    </category>
-	-->
-	
-	<!-- Limit some debug output, even when debug for EJBCA is enabled -->
-	<category name="org.apache.commons">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.apache.myfaces">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.hibernate.ejb">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.hibernate.cfg">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.hibernate.impl.SessionFactoryImpl">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.hibernate.hql.ast.AST">
-		<priority value="INFO"/>
-	</category>
-	<category name="org.hibernate.pretty.Printer">
-		<priority value="INFO"/>
-	</category>
-
-	<root> 
-		<priority value="DEBUG" />
-		<appender-ref ref="EJBCAFILE"/>
-	</root> 
-
-</log4j:configuration>
-EOF
-
-
-cat <<EOF > ejbca-custom/conf/mail.properties
-# ------------ Mail configuration ---------------------
-
-# Used to send notification email from the RA.
-# See \${ejbca.home}/src/appserver/ejbca-mail-service.xml
-# It will be copied in \${jboss.server.dir}/deploy/ejbca-mail-service.xml
-
-# Note that in JBoss 5.1.0 there is a bug so that only one mail configuration can be used.
-# Whatever mail configuration we deploy in \${jboss.server.dir}/deploy/ejbca-mail-service.xml 
-# is overridden by the default configuration in \${jboss.server.dir}/deploy/mail-service.xml.
-# The solution is to delete the file \${jboss.server.dir}/deploy/mail-service.xml.
-
-# The JNDI-name used to send email notifications from EJBCA.
-# Not that this differs between different application servers, see installation for 
-# instructions for your appserver. The default works for JBoss.
-# For Weblogic use 'mail/EJbcaMail'.
-#
-# Default: java:/EjbcaMail
-#mail.jndi-name=java:/EjbcaMail
-#mail.jndi-name=mail/EjbcaMail
-
-# user/password to connect to server for sending email notifications from EJBCA.
-# Default: ejbca_user, primekey
-#mail.user=ejbca_user
-#mail.password=
-
-# SMTP server for sending mail.
-# Default: localhost
-#mail.smtp.host=localhost
-
-# SMTP server port.
-# Default: 25
-#mail.smtp.port=25
-
-# Use SMTP authentication if you smtp host requires it
-# Default: false
-#mail.smtp.auth=false
-
-# Switch connection to a TLS-protected connection (if supported by server) before login.
-# Default: false
-#mail.smtp.starttls.enable=false
-
-# Email address used to send emails.
-# Default: ejbca-donotreply@domain.com
-#mail.from=ejbca-donotreply@domain.com
-
-# JavaMail debug info.
-# Default: false
-#mail.debug=false
-
-# Content encoding for the email message body.
-# Default: UTF-8
-#mail.contentencoding=UTF-8
-EOF
-
-
-
-
-
-cat <<EOF > ejbca-custom/conf/ocsp.properties
-# ------------ OCSP responder configuration ---------------------
-# These configurations are used both for EJBCA and the Validation Authority (VA).
-#
-# These values are used for OCSP responses signed by a CA and as defaults for delegated OCSP signing by OcspKeyBindings.
-# Certificate Profile or URL specific configuration here will still override the configured values of an OcspKeyBinding.
-
-# OCSP servlet enabled. If false there will be no servlet.
-# Default is true.
-#ocsp.enabled=false
-
-# Context root (the path in the URL)
-# Default is '/\${app.name}/publicweb/status'
-#ocsp.contextroot=/status
-
-# DEPRECATED VALUE
-# Deprecated since 6.2.4. The current value will be used to perform upgrade at first startup, and may be removed afterwards. 
-#
-# Specifies the subject of a certificate which is used to identify the 
-# responder which will generate responses when no real CA can be found from the request. 
-# This is used to generate 'unknown' responses when a request is received for a certificate 
-# that is not signed by any CA on this server. Recommended to use same as ca.dn.
-#
-# For the internal OCSP responder this is the subject DN of the CA to use for signing
-# For an external OCSP responder this is the issuer DN of the OCSP responders certificate to use for signing, i.e. the CAs subject DN.
-ocsp.defaultresponder=${ca_dn}
-
-# If set to false the OCSP responses will only contain the signature certificate (if ocsp.includesignercertinresponse is set to 'true'), 
-# and not the whole certificate chain of the OCSP responder.
-# Default true.
-#ocsp.includecertchain=true
-
-# If set to false, the  OCSP response will not contain the signing certificate.
-# Default true 
-#ocsp.includesignercert=true
-
-# Defines the ResponderID type as defined in RFC2560. Set to name for the Name type and keyhash for the KeyHash type.
-# Possible values: name, keyhash
-# Default: keyhash 
-#ocsp.responderidtype=keyhash
-
-# Specifies which signature algorithms should be used on OCSP responses. You can specify several algorithm
-# separated by ';'. If RSA keys are used in the OCSP signing certificate, the algorithm with RSA will be used, and
-# if ECDSA keys are used in the OCSP signing certificate, the algorithm with ECDSA will be used and if 
-# DSA keys are used in the OCSP signing certificate, the algorithm with DSA will be used.
-#
-# Default: SHA1WithRSA;SHA1WithECDSA;SHA1WithDSA
-#ocsp.signaturealgorithm=SHA1WithRSA;SHA1WithECDSA;SHA1WithDSA
-
-# The interval on which the the OCSP signing certificates are updated in seconds.
-# If set to 0 or negative these certificate are never updated.
-# Default: 300
-#ocsp.signingCertsValidTime=0
-
-# When a signing certificate is about to expire a WARN message could be written to log4j each time the key of the certificate is used.
-# This property defines when this message is started to be written.
-# The property is set to the number of seconds before the expiration that the WARN message starts to be written.
-# If set to 0 the warning is disabled.
-# Default: 604800 (1 week)
-#ocsp.warningBeforeExpirationTime=10000
-
-# If true a certificate that does not exist in the database, but is issued by a CA the responder handles
-# will be treated as not revoked. Default (when value is false) is to treat is as "unknown". Since the OCSP responders database normally contains all issued certificate
-# this gives sensible values (in line with RFC6960) to "ok", "revoked" and "unknown" certificates.
-# Setting this value to true is useful if you want an External OCSP responder database to only contain revoked certificates, and not
-# all certificates. In this case the responder will answer "ok" to requests for certificates that do not exist in the database. 
-# If both 'ocsp.nonexistingisgood' and 'ocsp.nonexistingisrevoked' are set to 'true', the responder will answer "ok".
-#
-# Default: false
-#ocsp.nonexistingisgood=false
-
-# The value of 'ocsp.nonexistingisgood=false' may be overridden if the URL that the client used to send the request is matching some regular expression.
-# The regular expressions that if any of them is fulfilled will override 'ocsp.nonexistingisgood=false' is numbered from 1 and up. It may be any numbers.
-# Here follows an example of 2:
-#ocsp.nonexistingisgood.uri.1=.*/thisEndingIsGood$
-#ocsp.nonexistingisgood.uri.2=^http://good.myhost.nu:8080/.*
-
-# The value of 'ocsp.nonexistingisgood=true' may be overridden if the URL that the client used to send the request is matching some regular expression.
-# The regular expressions that if any of them is fulfilled will override 'ocsp.nonexistingisgood=true' is numbered from 1 and up. It may be any numbers.
-# Here follows an example of 2:
-#ocsp.nonexistingisbad.uri.1=.*/thisEndingIsBad$
-#ocsp.nonexistingisbad.uri.2=^http://bad.myhost.nu:8080/.*
-
-# If true a certificate that does not exist in the database, but is issued by a CA the responder handles,
-# will be treated as revoked; the revocation reason will be "Certificate Hold" and the revocation time is January 1st, 1970 (compliant with RFC6960). 
-# Default (when this value and value of "Non existing is good" are false) is to treat it as "unknown".
-# If both "Non existing is good" and "Non existing is revoked", the responder will answer "ok".
-#
-# Default: false
-#ocsp.nonexistingisrevoked=false
-
-# The value of 'ocsp.nonexistingisrevoked=false' may be overridden if the URL that the client used to send the request is matching some regular expression.
-# The regular expressions that if any of them is fulfilled will override 'ocsp.nonexistingisrevoked=false' is numbered from 1 and up. It may be any numbers.
-# Here follows an example of 2:
-#ocsp.nonexistingisrevoked.uri.1=.*/thisEndingIsRevoked$
-#ocsp.nonexistingisrevoked.uri.2=^http://revoked.myhost.nu:8080/.*
-
-# An OCSP responder MAY choose to retain revocation information beyond a certificate's expiration.  The date obtained by subtracting this
-# retention interval value from the producedAt time in a response is defined as the certificate's "archive cutoff" date.
-# To illustrate, if a server is operated with a 7-year retention interval policy and status was produced at time t1, then the value
-# for ArchiveCutoff in the response would be (t1 - 7 years).
-#
-# OCSP-enabled applications would use an OCSP archive cutoff date to contribute to a proof that a digital signature was (or was not)
-# reliable on the date it was produced even if the certificate needed to validate the signature has long since expired
-# The value of this configuration should be set to the number of seconds of this retention interval. To disable the archive cutoff extension, 
-# the value of this configuration should be set to '-1'
-#
-# Default: 31536000 (1 year)
-#ocsp.expiredcert.retentionperiod = 31536000
-#ocsp.expiredcert.retentionperiod = -1
-
-# For HTTP get requests according to RFC5019 we can set HTTP headers in the response to allow caching proxies to cache responses.
-# untilNextUpdate is the number of seconds a response will be valid. 0 = disable.
-# Default: 0
-#ocsp.untilNextUpdate = 0
-
-# You can also specify different nextUpdate values depending on which certificate profiles the certificate was issued by.
-# This only works when you have published using EJBCA 3.9.0 or later, where the certificateProfileId column in the CertificateData table is populated.
-# You can find the certificateProfileId (999 in the example below) in the admin GUI.
-# If no specific certificateProfileId is specified the default value from ocsp.untilNextUpdate is used.
-#ocsp.999.untilNextUpdate = 50
-
-# For HTTP get requests according to RFC5019 we can set HTTP headers in the response to allow caching proxies to cache responses.
-# untilNextUpdate is the number of seconds a response will be valid. 0 = disable.
-# If this configuration is set, its value will override the global value in case of certificate with a revoked status..
-# Default: 0
-#ocsp.revoked.untilNextUpdate = 0
-
-# You can also specify different nextUpdate values depending on which certificate profiles the certificate was issued by.
-# This only works when you have published using EJBCA 3.9.0 or later, where the certificateProfileId column in the CertificateData table is populated.
-# You can find the certificateProfileId (999 in the example below) in the admin GUI.
-# If no specific certificateProfileId is specified the default value from ocsp.untilNextUpdate is used.
-# If this configuration is set, its value will override the global value in case of certificate with a revoked status..
-#ocsp.999.revoked.untilNextUpdate = 50
-
-# For HTTP get requests according to RFC5019 we can set HTTP headers in the response to allow caching proxies to cache responses.
-# maxAge is how long a response will be cached, in seconds. Should be less than untilNextUpdate.
-# Ignored if untilNextUpdate is disabled. 0 = disable.
-# Note that for responses of certificates with unknown status, the HTTP response header "Cache-control" will not contain the max age, but 
-# "no-cache, must-revalidate" instead. That is to prevent caching of unknown status.
-# Default: 30
-#ocsp.maxAge = 30
-
-# You can also specify different maxAge values depending on which certificate profiles the certificate was issued by.
-# This only works when you have published using EJBCA 3.9.0 or later, where the certificateProfileId column in the CertificateData table is populated.
-# You can find the certificateProfileId (999 in the example below) in the admin GUI.
-# If no specific certificateProfileId is specified the default value from ocsp.maxAge is used.
-#ocsp.999.maxAge = 100
-
-# For HTTP get requests according to RFC5019 we can set HTTP headers in the response to allow caching proxies to cache responses.
-# maxAge is how long a response will be cached, in seconds. Should be less than untilNextUpdate.
-# Ignored if untilNextUpdate is disabled. 0 = disable.
-# Note that for responses of certificates with unknown status, the HTTP response header "Cache-control" will not contain the max age, but 
-# "no-cache, must-revalidate" instead. That is to prevent caching of unknown status.
-# If this configuration is set, its value will override the global value in case of certificate with a revoked status.
-# Default: 30
-#ocsp.revoked.maxAge = 30
-
-# You can also specify different maxAge values depending on which certificate profiles the certificate was issued by.
-# This only works when you have published using EJBCA 3.9.0 or later, where the certificateProfileId column in the CertificateData table is populated.
-# You can find the certificateProfileId (999 in the example below) in the admin GUI.
-# If no specific certificateProfileId is specified the default value from ocsp.maxAge is used.
-# If this configuration is set, its value will override the global value in case of certificate with a revoked status.
-#ocsp.999.revoked.maxAge = 100
-
-# Specifies OCSP extension oids that will result in a call to an extension class, 
-# separate multiple entries with ';'
-# For any entry that should be always used, preface with '*' (e.g. *2.16.578.1.16.3.2)
-# Leave out if you do not know what this is.
-# Example value: 2.16.578.1.16.3.2 (Unid)
-# Example value: *1.3.36.8.3.13 (CertHash)
-# Default: nothing 
-#ocsp.extensionoid=
-
-# Specifies classes implementing OCSP extensions matching oids above, 
-# separate multiple entries with ;"
-# Leave out if you do not know what this is.
-# Example value: org.ejbca.core.protocol.ocsp.OCSPUnidExtension
-# Example value: org.ejbca.core.protocol.ocsp.extension.certhash.OcspCertHashExtension
-# Default: nothing
-#ocsp.extensionclass=
-
-# Datasource for Unid-Fnr mapping OCSP extension. 
-# Leave out if you do not know what this is.
-# No default value, must be set if the extension is used
-#ocsp.uniddatsource=
-
-# Directory containing certificates of trusted entities allowed to query for Fnrs. 
-# Leave out if you do not know what this is.
-# No default value, must be set if the extension is used
-#ocsp.unidtrustdir=
-
-# File containing the CA-certificate, in PEM format, that signed the trusted clients. 
-# Leave out if you do not know what this is.
-# No default value, must be set if the extension is used
-#ocsp.unidcacert=
-
-# Specifies if the OCSP-responder should require signed requests or not.
-# If signature is required, the signature certificate must be issued by a CA handled by the OCSP responder.
-#
-# Default: false
-#ocsp.signaturerequired=false
-
-# Timeout setting for the Global OCSP configuration cache. Once the cache has timed out it will be reread from the 
-# database.
-#
-# Default: 30000ms 
-#ocspconfigurationcache.cachetime=30000
-
-#------------------- Re-keying used by external OCSP responder------------------------------
-# When this feature is enabled a new signing key will automatically be generated a specified time before the certificate of the used key expires.
-# A certificate for the new key will be fetched by WS from EJBCA.
-# You also need to configure an AuthenticationKeyBinding as client SSL credential. (It will be created for you
-# during upgrade to EJBCA 6.0.0 where a client SSL keystore existed previously.)
-
-# Password for rekeying via the servlet. 
-# Default: null
-#ocsp.rekeying.trigging.password=
-
-# URL to webservice from which the certificate for a newly generated OCSP responder key should be fetched.
-# The automatic re-keying feature is disabled if this property is not defined.
-# Default: null
-#ocsp.rekeying.wsurl = https://milton:8443/ejbca/ejbcaws/ejbcaws
-
-# Specifies how often the signing certificates should be checked. Default value is 3600 seconds, but consider lowering this value if signing certificates are expected
-# to be valid less than 24h 
-#ocsp.rekeying.update.time.in.seconds=
-
-# Specifies how much safety margin a certificate should have before it's updated, i.e when it should be considered a candidate for renewal. The effective
-# validity time for a signing certificate is it's actual validity minus this value. Timer will output warnings if this value is less than the update time.
-#
-# The default for this value is 24h 
-#ocsp.rekeying.safety.margin.in.seconds=
-
-# Limits what hosts may request a manual rekeying via web service. Multiple hosts may be separated with a semicolon. 
-# Default: 127.0.0.1
-#ocsp.rekeying.trigging.hosts=
-
-#------------------- OCSP Logging settings -------------
-# Transaction logging logs summary lines for all OCSP request/responses, which can be used for charging clients if you are running a commercial OCSP service.
-# Specifies if transaction logging should be performed from the OCSP responder and formats how that information should be logged yyyy-MM-dd:HH:mm:ss
-# Change below to true if you want transaction information to be logged
-#
-# See the OCSP installation guide for more details on the transaction and audit logging.
-#
-# Default: false
-#ocsp.trx-log = true
-
-# Configure how time of logging in auditlog will be output
-# Default: yyyy-MM-dd:HH:mm:ss:z
-#ocsp.log-date = yyyy-MM-dd:HH:mm:ss:z
-
-# Configure which time zone will be used for logging
-# Default: GMT
-#ocsp.log-timezone = GMT
-
-# A pattern for use with ocsp.trx-log-order to replace constants with values during logging
-# Default: \\$\\{(.+?)\\}
-#ocsp.trx-log-pattern = \\$\\{(.+?)\\}
-
-# Use ocsp.trx-log-order to specify what information should be logged and in what order. You can also configure what characters you want in between
-# See OCSP Installation guide for documentation of all parameters.
-# Default: \${SESSION_ID};\${LOG_ID};\${STATUS};\${REQ_NAME}"\${CLIENT_IP}";"\${SIGN_ISSUER_NAME_DN}";"\${SIGN_SUBJECT_NAME}";\${SIGN_SERIAL_NO};"\${LOG_TIME}";\${REPLY_TIME};\${NUM_CERT_ID};0;0;0;0;0;0;0;"\${ISSUER_NAME_DN}";\${ISSUER_NAME_HASH};\${ISSUER_KEY};\${DIGEST_ALGOR};\${SERIAL_NOHEX};\${CERT_STATUS}
-#ocsp.trx-log-order = \${SESSION_ID};\${LOG_ID};\${STATUS};\${REQ_NAME}"\${CLIENT_IP}";"\${SIGN_ISSUER_NAME_DN}";"\${SIGN_SUBJECT_NAME}";\${SIGN_SERIAL_NO};"\${LOG_TIME}";\${REPLY_TIME};\${PROCESS_TIME};\${NUM_CERT_ID};0;0;0;0;0;0;0;"\${ISSUER_NAME_DN}";\${ISSUER_NAME_HASH};\${ISSUER_KEY};\${DIGEST_ALGOR};\${SERIAL_NOHEX};\${CERT_STATUS}
-
-# Audit logging logs the complete requests and responses, which can be used to trace complete transaction afterwards.
-# change ocsp.audit-log to true of you want audit logging turned on
-# Default: false
-#ocsp.audit-log = true
-
-# A pattern for use with ocsp.audit-order to replace constants with values during logging
-# Default: \\$\\{(.+?)\\}
-#ocsp.audit-log-pattern = \\$\\{(.+?)\\}
-
-# Use ocsp.audit-log-order to specify what information should be logged and in what order. You can also configure what characters you want in between
-# See OCSP Installation guide for documentation of all parameters.
-# Default: ocsp.audit-log-order = SESSION_ID:\${SESSION_ID};LOG ID:\${LOG_ID};"\${LOG_TIME}";TIME TO PROCESS:\${REPLY_TIME};\\nOCSP REQUEST:\\n"\${OCSPREQUEST}";\\nOCSP RESPONSE:\\n"\${OCSPRESPONSE}";\\nSTATUS:\${STATUS}
-#ocsp.audit-log-order = SESSION_ID:\${SESSION_ID};LOG ID:\${LOG_ID};"\${LOG_TIME}";REPLY TIME:\${REPLY_TIME};\\nTIME TO PROCESS:\${PROCESS_TIME};\\nOCSP REQUEST:\\n"\${OCSPREQUEST}";\\nOCSP RESPONSE:\\n"\${OCSPRESPONSE}";\\nSTATUS:\${STATUS}
-
-# Set to true if you want transactions to be aborted when logging fails
-# This option needs other configuration changes as well, see  "Safer Log4j Logging" in the OCSP install guide for more information
-# Default: false
-#ocsp.log-safer = true
-EOF
-
-cat <<EOF > ejbca-custom/conf/scepra.properties
-#####
-# Configuration file for default values for the External RA SCEP RA Server.
-# Configure as you please, but all values must be set to something.
-#
-# Default values (that you enter here) is built into the application and deployed
-# as default values.
-#
-# 'datasource.jndi-name-prefix' (see conf/database.properties.sample) and 'appserver.home'
-# (see conf/ejbca.properties.sample) also has to be configured. 
-#####
-
-# Allow dynamic re-configuration.
-#
-# By setting this property to true, you can also dynamically re-configure
-# the RA by changing values in properties files in the file system.
-# 
-# You can put a scepra.properties file in your "app server runtime home"/conf directory
-# to override these values. To find out which this directory is, it is logged during startup as for example:
-# [ExtraConfiguration] Added file to configuration source: /opt/jboss-4.2.2.GA/bin/conf/scepra.properties
-# This file is re-read if changed so changes can be made in runtime.
-#
-# You can put a /etc/ejbca/conf/extra/scepra.properties file to override these values.
-# This file is re-read if changed so changes can be made in runtime.
-#
-# Finally you can override anything by setting system properties for your appserver, for example:
-# java -Dscep.ra.authpwd=mysecret
-allow.external-dynamic.configuration=false
-
-
-#
-# Settings for the Stand-alone SCEP RA Server.
-# The stand-alone SCEP RA sevrer is deployed as an using External RA. 
-# See admin guide for more information about the External RA.  
-#
-
-# Path to RA keystore. Should be a full pathname.
-scep.ra.keyStorePath.1=${ejbca_home}/scep/sceprakeystore.p12
-
-# Password to the RA keystore configured above
-scep.ra.keyStorePassword.1=${scep_ra_keyStorePassword_1}
-
-# Advanced users: In theory it is possible to have several SCEP RAs configured with different keystores. 
-# In that case add more keystores with .2 etc. And configure new Servlets and mappings in src/WEB-INF/web.xml 
-# with these keystoreNumber.
-  
-# Set to another value than none if the Scep RA should require 
-# a specific password in the SCEP request. 
-# This should be used with createOrEditUser=true and will in this case be a set password 
-# required in the SCEP Request message. If this password is correct, the request will be automatically granted. 
-#
-# Leave as 'none' to not require any password, i.e. allow anything.
-# If createOrEditUser=false this will require the user to be pre-registered and the password in the request will
-# be used to authenticate this user with the pre-registered password.
-#
-# If createOrEdit=false and authPwd=none you can also use Approvals in EJBCA to require an administrator to 
-# approve the request in the CA Admin-GUI before a certificate is issued. 
-scep.ra.authPwd=none
-
-# Which generation scheme should be used, RANDOM, DN or USERNAME for base username. FIXED to have a fixed username.
-# Random will generate a 12 character long random username.
-# DN will take a part of the request DN, which part is defined by cmp.ra.namegenerationparameters, and use as the username.
-# USERNAME will use the request DN as username.
-# If the same username is constructed (for example UID) as an already existing user, the existing user will be modified with
-# new values for profile etc, and a new certificate will be issued for that user.
-#
-# Default: DN
-scep.ra.namegenerationscheme=DN
-
-# Parameters for name generation, for DN it can be for example CN, UID or SN. 
-# Either the CN or the UID from the request can be used. 
-# You can add several in order to have fall-back in case the first does not exist in the DN, for example UID;SN;CN. First try UID, 
-#if it does not exist try SN (SerialNumber) etc. 
-# For FIXED namegenerationscheme the username will be the value specified here.
-#
-# Default: CN
-scep.ra.namegenerationparameters=CN
-
-# Prefix to generated name, a string that can contain the markup \${RANDOM} to insert 10 random chars.
-# Example: 'MyPrefix - \${RANDOM}-' using RANDOM password generation will create a username like 'MyPrefix - DGR89NN54QW-GDHR473NH87Q
-#
-# Default: empty
-#scep.ra.namegenerationprefix=
-
-# Postfix to generated name, a string that can contain the markup \${RANDOM} to insert 10 random chars.
-# Example: MyPostfix - \${RANDOM}
-#
-# Default: empty
-#scep.ra.namegenerationpostfix=
-
-# Defines if a request to the RA will create a new user, or edit an existing in EJBCA. If false users must be 
-# pre-registered in EJBCA with a pwd. 
-# Note that even when the SCEP request is sent to the RA specific URL, if this option is set to 'false', no users will be added or edited
-#
-# Default: false
-scep.ra.createOrEditUser=true
-
-# The Certificate profile used to register new SCEP users, if createOrEditUser=true.
-scep.ra.certificateProfile=ENDUSER
-
-# The End entity profile used to register new SCEP users, if createOrEditUser=true.
-scep.ra.entityProfile=EMPTY
-
-# The default CA used to register new SCEP users, if createOrEditUser=true.
-scep.ra.defaultCA=ScepCA
-
-# Mapping a CAs issuer DN (as from the Admin-GUI->Edit CAs), which will be 
-# received from the client to a CA name.
-# This is used to find a CA from the request. If no CA can be found with a mapping, the defaultCA is used.
-# You can create several mappings for different CAs like this.
-# This is only used by the External RA SCEP Server, i.e. because there is no database with CAs to look in. 
-# In the SCEP server in the CA the CAName is looked up in the CA database, but in the External RA server there is no other 
-# information about CAs.
-# Note that all =, : or whitespace must be escaped with a \. See example below. 
-# CN\=Demo Scep\ CA,O\=EJBCA\ Sample,C\=DE=ScepCA
-
-# Database connection information. The right JDBC driver has to be installed manually in the application server.
-# SQL dialect is derived from the JDBC URL.
-# Default: jdbc:mysql://127.0.0.1/messages
-#scep.ra.datasource.jdbc-url=jdbc:mysql://127.0.0.1/messages
-
-# JDBC driver classname.
-# The JEE server needs to be configured with the appropriate JDBC driver for the selected database
-# Default: com.mysql.jdbc.Driver
-#externalra-database.driver=org.mariadb.jdbc.Driver
-#externalra-database.driver=com.mysql.jdbc.Driver
-#externalra-database.driver=org.postgresql.Driver
-#externalra-database.driver=org.hsqldb.jdbcDriver
-#externalra-database.driver=oracle.jdbc.driver.OracleDriver
-#externalra-database.driver=com.ibm.db2.jcc.DB2Driver
-
-# Username for database connection.
-# Default: ejbca
-#scep.ra.datasource.username=ejbca
-
-# Password for database connection.
-# Default: ejbca
-scep.ra.datasource.password=${scep_ra_datasource_password}
-EOF
-
-cat <<EOF > ejbca-custom/conf/va.properties
-#------------------- Validation Authority (VA) Healthcheck settings -------------
-# Specifies the basic settings of the VA healthcheck
-# (i.e. VA specific health checks that runs as part of EJBCA healthcheck).
-#
-# For more information see healthcheck settings in ejbca.properties.
-#
-# Configure these options if you are configuring a VA now.
-
-# Most of the old ocsphealthcheck.* properties have been moved
-# to healthcheck.* in ejbca.properties
-
-# Parameter to configure if all available signing keys should be tested.
-# The test will fail if any of the available signing keys is not working or if there are no available signing keys.
-# If the OCSP responder is disable the test will always succeed.
-# Default: true
-#ocsphealthcheck.signtest=false
-
-# True if the healthcheck should check the validity of all signing certificates.
-# If your cluster of responders have the same expiration time for all signing certificates it could be better not to check since
-# it might be better to sign with an old certificate than not signing at all. Otherwise it is usually a good idea to do this check
-# and exclude a responder with no valid signing certificate.
-# If the OCSP responder is disable the test will always succeed.
-# Default: true
-#ocsphealthcheck.checkSigningCertificateValidity=false
-
-
-
-#------------------- Validation Authority (VA) Certificate and CRL Store setting -------------
-# Below you will find setting common for Certificate and CRL Store:
-
-# You may define alias for the sKIDHash hash.
-# The example below defines the alias 'root' for 'O4RdnGNf3WPioslAQsX71aR1/MI' and then:
-# http://myhost.com:8080/certificates/search.cgi?sKIDHash=O4RdnGNf3WPioslAQsX71aR1/MI is the same as http://myhost.com:8080/certificates/search.cgi?alias=root
-# http://myhost.com:8080/crls/search.cgi?sKIDHash=O4RdnGNf3WPioslAQsX71aR1/MI is the same as http://myhost.com:8080/crls/search.cgi?alias=root
-# http://myhost.com:8080/crls/search.cgi?sKIDHash=O4RdnGNf3WPioslAQsX71aR1/MI&delta= is the same as http://myhost.com:8080/crls/search.cgi?alias=root&delta=
-# Copy the sKIDHash from http://myhost.com:8080/crls/search.cgi or http://myhost.com:8080/certificates/search.cgi and paste it in the config file and restart the application server.
-# The downloaded file will use the alias for the name.
-# Here is the example:
-#va.sKIDHash.alias.root=O4RdnGNf3WPioslAQsX71aR1/MI
 EOF
 
 
@@ -1981,9 +1347,6 @@ fi
 RUN_AS_ROOT_FILE="/tmp/run_as_root.sh"
 cat <<EOF >${RUN_AS_ROOT_FILE}
 $PKG_INSTALL
-#groupadd ${ejbca_group}
-#useradd -md ${ejbca_home} -g ${ejbca_group} -s /bin/bash ${ejbca_user}
-
 cat <<EOF2 > /etc/systemd/system/ejbca.service
 [Unit]
 Description=EJBCA PKI
@@ -2012,6 +1375,10 @@ chmod 755 "${RUN_AS_ROOT_FILE}"
 echo "EJBCA will be installed on user ${ejbca_user}"
 echo 
 echo "please execute /tmp/run_as_root.sh as root"
+echo "operations performed by that script:"
+echo "* install required packages"
+echo "* set up systemd service for ejbca"
+echo "* reload systemd"
 echo "Please select \"Yes\" if you did so, but not before"
 select yn in "Yes" "No"; do
   case $yn in
