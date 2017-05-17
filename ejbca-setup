@@ -86,8 +86,8 @@ init_mysql() {
   mysql_user=$(grep database.username ejbca-custom/conf/database.properties | awk -F= '{ print $2 }' | grep -v '^$')
   mysql_pass=$(grep database.password ejbca-custom/conf/database.properties | awk -F= '{ print $2 }' | grep -v '^$')
   mysql_host=$(grep database.url ejbca-custom/conf/database.properties | awk -F/ '{print $3}' | awk -F: '{print $1}' | grep -v '^$')
-  echo 'drop database ejbca;' | mysql --user=$mysql_user --password=$mysql_pass --host=${mysql_host} ejbca
- echo 'create database ejbca default character set = utf8 default collate = utf8_general_ci;' | mysql --user=$mysql_user --password=$mysql_pass --host=${mysql_host} || exit 1
+ echo "drop database ${database_name};" | mysql --user=$mysql_user --password=$mysql_pass --host=${mysql_host} ${database_name}
+ echo "create database ${database_name} default character set = utf8 default collate = utf8_general_ci;" | mysql --user=$mysql_user --password=$mysql_pass --host=${mysql_host} || exit 1
 }
 
 
@@ -230,6 +230,32 @@ wildfly_setup_logging() {
 }
 
 
+ejbca_get_release() {
+  cd Download
+  if [ ! -f ejbca_ce_${EJBCA_VERSION}.zip ]; then
+    curl -o ejbca_ce_${EJBCA_VERSION}.zip -L "${EJBCA_DOWNLOAD_URL}"
+    curl -o ejbca_ce_${EJBCA_VERSION}.zip.SHA256 -L "${EJBCA_DOWNLOAD_SHA256_URL}"
+    sha256sum --check ejbca_ce_6_5.0.5.zip.SHA256
+    if [ $? -ne 0 ]; then
+       echo "SHA256 for EJBCA does not match"
+       rm -rf "ejbca_ce_${EJBCA_VERSION}.zip" "ejbca_ce_${EJBCA_VERSION}.zip.SHA256"
+       exit 1
+    fi
+  fi
+  cd ..
+  unzip Download/ejbca_ce_${EJBCA_VERSION}.zip || exit 1
+  if [ -h ejbca ]; then
+    rm -f ejbca
+  fi
+  ln -s ejbca_ce_${EJBCA_VERSION} ejbca
+}
+
+
+ejbca_get_trunk() {
+  svn co https://svn.cesecore.eu/svn/ejbca/trunk/ejbca/
+}
+
+
 ejbca_installer() {
   cd ~
   rm -f /tmp/run_as_root.sh
@@ -255,7 +281,7 @@ ejbca_installer() {
        exit 1
     fi
   fi
-  cd..
+  cd ..
 
   if [ ! -f Download/mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar ]; then
     cd Download
@@ -270,21 +296,11 @@ ejbca_installer() {
     cd ..
   fi
   
-  if [ ! -f Download/ejbca_ce_${EJBCA_VERSION}.zip ]; then
-    cd Download
-    curl -o ejbca_ce_${EJBCA_VERSION}.zip -L "${EJBCA_DOWNLOAD_URL}"
-    curl -o ejbca_ce_${EJBCA_VERSION}.zip.SHA256 -L "${EJBCA_DOWNLOAD_SHA256_URL}"
-    sha256sum --check ejbca_ce_6_5.0.5.zip.SHA256
-    if [ $? -ne 0 ]; then
-       echo "SHA256 for EJBCA does not match"
-       rm -rf "ejbca_ce_${EJBCA_VERSION}.zip" "ejbca_ce_${EJBCA_VERSION}.zip.SHA256"
-       exit 1
-    fi
-    cd ..
-  fi
-  
   rm -rf "${WILDFLY_DIR}" > /dev/null 2> /dev/null
   rm -rf "ejbca_ce_${EJBCA_VERSION}" > /dev/null 2> /dev/null
+
+  ejbca_get_release
+  #ejbca_get_trunk
   
   tar xvf Download/${WILDFLY_TAR}
   if [ -h wildfly ]; then
@@ -308,7 +324,7 @@ ejbca_installer() {
   wildfly_check || exit 1
   
   # Add datasource
-  wildfly_exec "data-source add --name=ejbcads --driver-name=\"mariadb-java-client.jar\" --connection-url=\"jdbc:mysql://${mysql_host}:3306/ejbca\" --jndi-name=\"java:/EjbcaDS\" --use-ccm=true --driver-class=\"org.mariadb.jdbc.Driver\" --user-name=\"${mysql_user}\" --password=\"${mysql_pass}\" --validate-on-match=true --background-validation=false --prepared-statements-cache-size=50 --share-prepared-statements=true --min-pool-size=5 --max-pool-size=150 --pool-prefill=true --transaction-isolation=TRANSACTION_READ_COMMITTED --check-valid-connection-sql=\"select 1;\""
+  wildfly_exec "data-source add --name=ejbcads --driver-name=\"mariadb-java-client.jar\" --connection-url=\"jdbc:mysql://${mysql_host}:3306/${database_name}\" --jndi-name=\"java:/EjbcaDS\" --use-ccm=true --driver-class=\"org.mariadb.jdbc.Driver\" --user-name=\"${mysql_user}\" --password=\"${mysql_pass}\" --validate-on-match=true --background-validation=false --prepared-statements-cache-size=50 --share-prepared-statements=true --min-pool-size=5 --max-pool-size=150 --pool-prefill=true --transaction-isolation=TRANSACTION_READ_COMMITTED --check-valid-connection-sql=\"select 1;\""
   wildfly_exec ":reload"
   
   # Configure WildFly Remoting
@@ -330,13 +346,7 @@ ejbca_installer() {
   wildfly_exec "/socket-binding-group=standard-sockets/socket-binding=http:remove"
   wildfly_exec "/socket-binding-group=standard-sockets/socket-binding=https:remove"
   wildfly_exec ":reload"
-  
-  unzip Download/ejbca_ce_${EJBCA_VERSION}.zip || exit 1
-  if [ -h ejbca ]; then
-    rm -f ejbca
-  fi
-  ln -s ejbca_ce_${EJBCA_VERSION} ejbca
-
+ 
   echo "deploying EJBCA"
   cd ejbca || exit 1
   ant clean deployear
