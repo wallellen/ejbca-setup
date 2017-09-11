@@ -35,6 +35,7 @@
 ########################################################################################
 # Configurables
 
+memsize=2048 # in MBytes
 ejbca_user=$(whoami)
 ejbca_group=$(id -g -n $ejbca_user)
 ejbca_home=~
@@ -47,9 +48,9 @@ database_driver="org.mariadb.jdbc.Driver"
 database_username="ejbca"
 database_password="very***bad***database***password"
 superadmin_cn="SuperAdmin"
-ca_name="ManagementCA"
+ca_name="Management"
 BASE_DN="O=Example CA,C=DE"
-ca_dn="CN=ManagementCA,${BASE_DN}"
+ca_dn="CN=${ca_name},${BASE_DN}"
 
 WILDFLY_VERSION="10.1.0.Final"
 EJBCA_VERSION="6_5.0.5"
@@ -167,9 +168,10 @@ ejbca_deploy_check() {
 }
 
 
-wildfly_register_database() {
-  wildfly/bin/jboss-cli.sh --connect "/subsystem=datasources/jdbc-driver=org.mariadb.jdbc.Driver:add(driver-name=org.mariadb.jdbc.Driver,driver-module-name=org.mariadb,driver-xa-datasource-class-name=org.mariadb.jdbc.MariaDbDataSource)"
-  wildfly_reload
+start_wildfly() {
+  . ${ejbca_home}/environment
+  export JAVA_OPTS
+  nohup wildfly/bin/standalone.sh -b 0.0.0.0 > /dev/null 2> /dev/null &
 }
 
 
@@ -203,7 +205,7 @@ wildfly_setup_https() {
   wildfly_exec "/socket-binding-group=standard-sockets/socket-binding=httpspub:add(port="8442", interface=\"httpspub\")"
 
   wildfly_exec ":shutdown"
-  nohup wildfly/bin/standalone.sh -b 0.0.0.0 > /dev/null 2> /dev/null &
+  start_wildfly
   wildfly_check 240
 
   wildfly_exec "/subsystem=undertow/server=default-server/https-listener=httpspriv:add(socket-binding=httpspriv, security-realm=\"SSLRealm\", verify-client=REQUIRED)"
@@ -310,16 +312,12 @@ ejbca_installer() {
   
   cp "Download/mariadb-java-client-${MARIADB_CONNECTOR_VERSION}.jar" "wildfly/standalone/deployments/mariadb-java-client.jar" || exit 1
   
-  # patch standalone.conf
-  cd ~/wildfly/bin || exit 1
-  sed -i.bak 's/JAVA_OPTS="-Xms64m -Xmx512m -XX:MaxPermSize=256m -Djava.net.preferIPv4Stack=true"/JAVA_OPTS="-Xms2048m -Xmx2048m -XX:MaxPermSize=384m -Djava.net.preferIPv4Stack=true"/g' standalone.conf
-  cd ~
-  
-  nohup wildfly/bin/standalone.sh -b 0.0.0.0 > /dev/null 2> /dev/null &
+  create_environment
+  start_wildfly
   sleep 3
   wildfly_check || exit 1
-  #wildfly_register_database || exit 1
   wildfly_enable_ajp || exit 1
+  tune_wildfly || exit 1
   wildfly_reload || exit 1
   wildfly_check || exit 1
   
@@ -1314,6 +1312,20 @@ EOF
 }
 
 
+tune_wildfly() {
+  wildfly_exec "/subsystem=io/worker=default/:write-attribute(name=task-max-threads,value=500)"
+  wildfly_exec "/subsystem=io/worker=default/:write-attribute(name=io-threads,value=500)"
+}
+
+
+create_environment() {
+  cd ~
+cat <<EOF > environment
+JAVA_OPTS="-Xms${memsize}m -Xmx${memsize}m -XX:MetaspaceSize=96M -XX:MaxMetaspaceSize=256m -XX:+UseParallelGC -Djava.net.preferIPv4Stack=true -Djboss.modules.system.pkgs=\$JBOSS_MODULES_SYSTEM_PKGS -Djava.awt.headless=true -Dsun.rmi.dgc.client.gcInterval=1800000 -Dsun.rmi.dgc.server.gcInterval=1800000"
+EOF
+}
+
+
 cat <<EOF
 #######        #  ######    #####      #     
 #              #  #     #  #     #    # #    
@@ -1366,6 +1378,7 @@ After=network.target
 Type=simple
 User=${ejbca_user}
 Group=${ejbca_group}
+EnvironmentFile=${ejbca_home}/environment
 WorkingDirectory=${ejbca_home}
 ExecStart=${ejbca_home}/wildfly/bin/standalone.sh -b 0.0.0.0
 ExecStop=${ejbca_home}/wildfly/bin/jboss-cli.sh --connect command=:shutdown
